@@ -561,47 +561,112 @@ def logout():
 
 @app.route("/teacher/login", methods=["GET", "POST"])
 def teacher_login():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "")
+    """Authenticate a teacher by username/email or admin override password."""
+    next_url = request.form.get("next") if request.method == "POST" else request.args.get("next")
+    if next_url and not next_url.startswith("/"):
+        next_url = None
 
+    if request.method == "POST":
+        identifier = str(request.form.get("username") or "").strip()
+        password = str(request.form.get("password") or "")
+
+        if not identifier:
+            return render_template(
+                "teacher_login.html",
+                error="Enter your teacher username or email address.",
+                username=identifier,
+                next=next_url,
+            ), 400
+
+        if not password:
+            return render_template(
+                "teacher_login.html",
+                error="Enter your password.",
+                username=identifier,
+                next=next_url,
+            ), 400
+
+        # Support both teacher username and teacher email.
         teacher = Teacher.query.filter(
-            func.lower(Teacher.username) == username.lower(),
-            Teacher.active.is_(True),
+            db.or_(
+                func.lower(Teacher.username) == identifier.lower(),
+                func.lower(Teacher.email) == identifier.lower(),
+            )
         ).first()
 
         if not teacher:
-            return render_template("teacher_login.html", error="Invalid teacher username or password", username=username), 401
+            return render_template(
+                "teacher_login.html",
+                error="No teacher account was found for that username or email address.",
+                username=identifier,
+                next=next_url,
+            ), 401
 
-        teacher_password_ok = check_password_hash(teacher.password_hash, password)
+        if not teacher.active:
+            return render_template(
+                "teacher_login.html",
+                error="This teacher account is inactive. Please contact the administrator.",
+                username=identifier,
+                next=next_url,
+            ), 403
+
+        teacher_password_ok = False
+        try:
+            if teacher.password_hash:
+                teacher_password_ok = check_password_hash(teacher.password_hash, password)
+        except Exception:
+            teacher_password_ok = False
+
         admin_override = admin_password_matches(password)
 
         if not teacher_password_ok and not admin_override:
-            return render_template("teacher_login.html", error="Invalid teacher username or password", username=username), 401
+            return render_template(
+                "teacher_login.html",
+                error="Incorrect teacher password.",
+                username=identifier,
+                next=next_url,
+            ), 401
 
-        # Local-only teacher accounts do not need email verification.
-        # Email-backed accounts require verification unless the current admin
-        # password is intentionally used as the administrator override.
+        # If an email exists, require verification unless the administrator
+        # intentionally uses the current admin password as an override.
         if teacher.email and not teacher.email_verified and not admin_override:
             return render_template(
                 "teacher_login.html",
-                error="Your email address has not been verified yet. Check your inbox or use the administrator override password.",
-                username=username,
+                error="Your teacher email has not been verified yet. Check your inbox or contact the administrator.",
+                username=identifier,
                 verification_required=True,
+                next=next_url,
             ), 403
 
+        # Create a teacher-only session.  This preserves the existing
+        # teacher_required() and teacher_can_access_student() controls.
         session.clear()
         session.permanent = True
         session["teacher_id"] = teacher.id
         session["teacher_username"] = teacher.username
         session["teacher_admin_override"] = bool(admin_override)
-        teacher.last_login = now_local()
-        if admin_override:
-            audit("teacher_login_admin_override", f"Administrator override used to sign in as teacher {teacher.username}", "Teacher", teacher.id)
-        db.session.commit()
-        return redirect(request.args.get("next") or url_for("dashboard"))
 
-    return render_template("teacher_login.html")
+        teacher.last_login = now_local()
+
+        if admin_override:
+            audit(
+                "teacher_login_admin_override",
+                f"Administrator override used to sign in as teacher {teacher.username}",
+                "Teacher",
+                teacher.id,
+            )
+        else:
+            audit(
+                "teacher_login",
+                f"Teacher {teacher.username} logged in",
+                "Teacher",
+                teacher.id,
+            )
+
+        db.session.commit()
+        return redirect(next_url or url_for("dashboard"))
+
+    return render_template("teacher_login.html", next=next_url)
 
 @app.route("/teacher/verify/<token>")
 def teacher_verify(token):
