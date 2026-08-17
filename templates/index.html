@@ -1,2 +1,130 @@
-{% extends "base.html" %}{% block title %}Student Attendance{% endblock %}{% block crumb %}Home{% endblock %}
-{% block content %}<div class="page-head"><div><h1>Student Attendance System</h1><p>Fast, local and face-recognition based attendance management.</p></div></div><div class="grid grid-2"><div class="card stat-card"><div class="stat-label">REGISTERED STUDENTS</div><div class="stat">{{ total_users }}</div></div><div class="card stat-card"><div class="stat-label">TODAY PRESENT</div><div class="stat">{{ today_attendance }}</div></div></div><div class="card" style="margin-top:18px"><h2>Get started</h2><p class="muted">Admin access is required for student registration and system management.</p><div class="actions" style="margin-top:14px">{% if logged_in %}<a class="btn btn-primary" href="/admin">Open Dashboard</a>{% else %}<a class="btn btn-primary" href="/login">Admin Login</a>{% endif %}<a class="btn btn-success" href="/attendance">Attendance Scanner</a></div></div>{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}Student Attendance{% endblock %}
+{% block crumb %}Home{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+    <div>
+        <h1>Student Attendance System</h1>
+        <p>Fast, local and face-recognition based attendance management.</p>
+    </div>
+</div>
+
+<div class="grid grid-2">
+
+    <div class="card stat-card">
+        <div class="stat-label">REGISTERED STUDENTS</div>
+        <div class="stat">{{ total_users }}</div>
+    </div>
+
+    <div class="card stat-card">
+        <div class="stat-label">TODAY PRESENT</div>
+        <div class="stat">{{ today_attendance }}</div>
+    </div>
+
+</div>
+
+<div class="card" style="margin-top:18px">
+
+    <h2>Get started</h2>
+
+    <p class="muted">
+        Choose your account type to continue.
+    </p>
+
+    <div class="actions" style="margin-top:14px">
+
+        {% if session.get('admin_id') %}
+
+            <a class="btn btn-primary" href="/admin">
+                {{ icon('home') }}
+                Admin Dashboard
+            </a>
+
+        {% elif session.get('teacher_id') %}
+
+            <a class="btn btn-primary" href="/dashboard">
+                {{ icon('home') }}
+                Teacher Dashboard
+            </a>
+
+        {% else %}
+
+            <a class="btn btn-primary" href="/login">
+                {{ icon('settings') }}
+                Admin Login
+            </a>
+
+            <a class="btn btn-success" href="/teacher/login">
+                {{ icon('teacher') }}
+                Teacher Login
+            </a>
+
+        {% endif %}
+
+        <a class="btn btn-success" href="/attendance">
+            {{ icon('scan') }}
+            Attendance Scanner
+        </a>
+
+    </div>
+
+</div>
+
+{% if not logged_in %}
+
+<div class="grid grid-2" style="margin-top:18px">
+
+    <div class="card">
+
+        <div class="section-title">
+            <h2>Teacher access</h2>
+            <span class="badge badge-green">Restricted</span>
+        </div>
+
+        <p class="muted">
+            Teachers can register students and view attendance
+            only for students assigned to their own account.
+        </p>
+
+        <a
+            class="btn btn-outline"
+            href="/teacher/login"
+            style="margin-top:10px"
+        >
+            {{ icon('teacher') }}
+            Sign in as Teacher
+        </a>
+
+    </div>
+
+    <div class="card">
+
+        <div class="section-title">
+            <h2>Administrator access</h2>
+            <span class="badge badge-yellow">Admin</span>
+        </div>
+
+        <p class="muted">
+            Administrators can manage teachers, students,
+            attendance, notifications and system settings.
+        </p>
+
+        <a
+            class="btn btn-outline"
+            href="/login"
+            style="margin-top:10px"
+        >
+            {{ icon('settings') }}
+            Sign in as Admin
+        </a>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+{% endblock %}
