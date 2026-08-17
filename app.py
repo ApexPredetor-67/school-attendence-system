@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 import json
 import zipfile
 from werkzeug.security import check_password_hash, generate_password_hash
-from sqlalchemy import func, text, inspect, or_
+from sqlalchemy import func, text, inspect
 from sqlalchemy.exc import IntegrityError
 
 from models import db, User, Attendance, Admin, AuditLog, Teacher, TeacherVerificationToken, SchoolCalendar, Notification, AppSetting
@@ -517,37 +517,10 @@ def inject_nav_counts():
 @app.route("/")
 def index():
     today = now_local().date()
-    teacher = current_teacher()
-
-    # Teachers only see their own students and attendance on the home page.
-    if teacher and teacher.active and not session.get("admin_id"):
-        total_users = User.query.filter_by(
-            class_teacher_id=teacher.id,
-            active=True,
-        ).count()
-
-        today_attendance = (
-            Attendance.query
-            .join(User)
-            .filter(
-                User.class_teacher_id == teacher.id,
-                User.active.is_(True),
-                Attendance.date == today,
-                Attendance.archived.is_(False),
-            )
-            .count()
-        )
-    else:
-        total_users = User.query.filter_by(active=True).count()
-        today_attendance = Attendance.query.filter_by(
-            date=today,
-            archived=False,
-        ).count()
-
     return render_template(
         "index.html",
-        total_users=total_users,
-        today_attendance=today_attendance,
+        total_users=User.query.count(),
+        today_attendance=Attendance.query.filter_by(date=today, archived=False).count(),
         logged_in=bool(session.get("admin_id") or session.get("teacher_id")),
     )
 
@@ -589,22 +562,7 @@ def logout():
 @app.route("/teacher/login", methods=["GET", "POST"])
 def teacher_login():
     """Authenticate a teacher by username/email or admin override password."""
-
-    # If a teacher is already authenticated, do not render the login
-    # form again. Send them to the teacher dashboard.
-    if session.get("teacher_id"):
-        teacher = current_teacher()
-        if teacher and teacher.active:
-            return redirect(url_for("dashboard"))
-
-    if session.get("admin_id"):
-        return redirect(url_for("admin_home"))
-
-    next_url = (
-        request.form.get("next")
-        if request.method == "POST"
-        else request.args.get("next")
-    )
+    next_url = request.form.get("next") if request.method == "POST" else request.args.get("next")
     if next_url and not next_url.startswith("/"):
         next_url = None
 
@@ -623,13 +581,14 @@ def teacher_login():
         if not password:
             return render_template(
                 "teacher_login.html",
-                error="Enter your teacher password.",
+                error="Enter your password.",
                 username=identifier,
                 next=next_url,
             ), 400
 
+        # Support both teacher username and teacher email.
         teacher = Teacher.query.filter(
-            or_(
+            db.or_(
                 func.lower(Teacher.username) == identifier.lower(),
                 func.lower(Teacher.email) == identifier.lower(),
             )
@@ -654,10 +613,7 @@ def teacher_login():
         teacher_password_ok = False
         try:
             if teacher.password_hash:
-                teacher_password_ok = check_password_hash(
-                    teacher.password_hash,
-                    password,
-                )
+                teacher_password_ok = check_password_hash(teacher.password_hash, password)
         except Exception:
             teacher_password_ok = False
 
@@ -671,22 +627,19 @@ def teacher_login():
                 next=next_url,
             ), 401
 
-        if (
-            teacher.email
-            and not teacher.email_verified
-            and not admin_override
-        ):
+        # If an email exists, require verification unless the administrator
+        # intentionally uses the current admin password as an override.
+        if teacher.email and not teacher.email_verified and not admin_override:
             return render_template(
                 "teacher_login.html",
-                error=(
-                    "Your teacher email has not been verified yet. "
-                    "Check your inbox or contact the administrator."
-                ),
+                error="Your teacher email has not been verified yet. Check your inbox or contact the administrator.",
                 username=identifier,
                 verification_required=True,
                 next=next_url,
             ), 403
 
+        # Create a teacher-only session.  This preserves the existing
+        # teacher_required() and teacher_can_access_student() controls.
         session.clear()
         session.permanent = True
         session["teacher_id"] = teacher.id
@@ -711,13 +664,9 @@ def teacher_login():
             )
 
         db.session.commit()
-
         return redirect(next_url or url_for("dashboard"))
 
-    return render_template(
-        "teacher_login.html",
-        next=next_url,
-    )
+    return render_template("teacher_login.html", next=next_url)
 
 @app.route("/teacher/verify/<token>")
 def teacher_verify(token):
