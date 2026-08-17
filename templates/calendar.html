@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}School Calendar{% endblock %}
+{% block crumb %}School Calendar{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>School Calendar</h1>
+    <p>Only working school days are included in attendance percentages. Teachers can view the calendar; administrators can edit it.</p>
+  </div>
+  <div class="actions">
+    <button class="btn btn-outline" id="prevBtn" type="button">←</button>
+    <button class="btn btn-light" id="todayBtn" type="button">Today</button>
+    <strong id="monthTitle" style="padding:10px 6px;min-width:150px;text-align:center"></strong>
+    <button class="btn btn-outline" id="nextBtn" type="button">→</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="calendar-toolbar">
+    <div class="legend"><span><i class="dot working"></i> Working</span><span><i class="dot off"></i> Non-working</span><span><i class="dot override"></i> Special override</span></div>
+    <span id="loadStatus" class="small muted">Loading calendar…</span>
+  </div>
+  <div class="calendar-head"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+  <div id="calendar" class="calendar-grid"></div>
+</div>
+
+<div class="card" style="margin-top:18px">
+  <div class="section-title"><h2>How attendance percentages work</h2><span class="badge badge-green">Calendar driven</span></div>
+  <p class="muted">A date enters the denominator only when it is a working day. Holidays, closures and special non-working days therefore do not lower a student's percentage. A special working Saturday can be enabled even when the weekly default is Monday–Friday.</p>
+</div>
+
+{% if session.get('admin_id') %}
+<div id="editCard" class="card" style="display:none;margin-top:18px">
+  <div class="section-title"><h2>Edit selected date</h2><button class="btn btn-light" id="closeEdit" type="button">Close</button></div>
+  <p id="selectedDate" class="muted"></p>
+  <div class="form-grid">
+    <div class="form-group"><label for="dayType">Day type</label><select id="dayType"><option value="true">Working day</option><option value="false">Non-working / holiday</option></select></div>
+    <div class="form-group"><label for="reason">Reason</label><input id="reason" maxlength="255" placeholder="Holiday, exam day, special working Saturday…"></div>
+  </div>
+  <div class="actions"><button class="btn btn-primary" id="saveDate" type="button">Save date</button><button class="btn btn-light" id="resetDate" type="button">Reset to weekly default</button></div>
+  <div id="editMsg"></div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  const calendarEl = document.getElementById('calendar');
+  const titleEl = document.getElementById('monthTitle');
+  const statusEl = document.getElementById('loadStatus');
+  const isAdmin = {{ 'true' if session.get('admin_id') else 'false' }};
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  let current = new Date();
+  current = new Date(current.getFullYear(), current.getMonth(), 1);
+  let selected = '';
+  let rowsByDate = {};
+
+  function esc(value){return String(value ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+  function keyFor(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+
+  async function loadCalendar(){
+    const y=current.getFullYear(), m=current.getMonth()+1;
+    titleEl.textContent=monthNames[current.getMonth()]+' '+y;
+    statusEl.textContent='Loading…';
+    try{
+      const response=await fetch(`/api/calendar?year=${y}&month=${m}`,{headers:{'Accept':'application/json'}});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.error||'Unable to load calendar');
+      rowsByDate=Object.fromEntries(data.map(x=>[x.date,x]));
+      renderCalendar(y,current.getMonth(),data);
+      statusEl.textContent=`${data.filter(x=>x.is_working).length} working day(s) in this month`;
+    }catch(err){
+      calendarEl.innerHTML=`<div class="empty" style="grid-column:1/-1">${esc(err.message)}</div>`;
+      statusEl.textContent='Calendar could not be loaded';
+    }
+  }
+
+  function renderCalendar(y,m,data){
+    const first=new Date(y,m,1);
+    const offset=(first.getDay()+6)%7;
+    const total=new Date(y,m+1,0).getDate();
+    let html='';
+    for(let i=0;i<offset;i++) html+='<div class="cal-day blank"></div>';
+    for(let d=1;d<=total;d++){
+      const key=keyFor(y,m,d), x=rowsByDate[key];
+      const todayKey=keyFor(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+      const cls=x.is_working?'working':'off';
+      html+=`<button type="button" class="cal-day ${cls} ${x.override?'has-override':''} ${key===todayKey?'today':''}" data-date="${key}" ${isAdmin?'':'disabled'}>
+        <span class="cal-num">${d}</span>
+        <span class="badge ${x.is_working?'badge-green':'badge-gray'}">${x.is_working?'Working':'Off'}</span>
+        ${x.override?'<span class="override-label">Override</span>':''}
+        ${x.reason?`<small>${esc(x.reason)}</small>`:''}
+      </button>`;
+    }
+    calendarEl.innerHTML=html;
+    if(isAdmin) calendarEl.querySelectorAll('.cal-day[data-date]').forEach(btn=>btn.addEventListener('click',()=>selectDate(btn.dataset.date)));
+  }
+
+  function selectDate(date){
+    selected=date;
+    const card=document.getElementById('editCard');
+    const x=rowsByDate[date];
+    if(!card||!x) return;
+    document.getElementById('selectedDate').textContent=date;
+    document.getElementById('dayType').value=String(x.is_working);
+    document.getElementById('reason').value=x.reason||'';
+    document.getElementById('editMsg').textContent='';
+    card.style.display='block';
+    card.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+
+  async function saveSelected(){
+    if(!selected) return;
+    const response=await fetch('/api/calendar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:selected,is_working:document.getElementById('dayType').value==='true',reason:document.getElementById('reason').value})});
+    const data=await response.json();
+    const msg=document.getElementById('editMsg');
+    msg.className='message '+(response.ok?'ok':'err'); msg.textContent=data.message||data.error;
+    if(response.ok) await loadCalendar();
+  }
+
+  async function resetSelected(){
+    if(!selected) return;
+    const response=await fetch('/api/calendar/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:selected})});
+    const data=await response.json();
+    const msg=document.getElementById('editMsg');
+    msg.className='message '+(response.ok?'ok':'err'); msg.textContent=data.message||data.error;
+    if(response.ok) await loadCalendar();
+  }
+
+  document.getElementById('prevBtn').addEventListener('click',()=>{current=new Date(current.getFullYear(),current.getMonth()-1,1);loadCalendar();});
+  document.getElementById('nextBtn').addEventListener('click',()=>{current=new Date(current.getFullYear(),current.getMonth()+1,1);loadCalendar();});
+  document.getElementById('todayBtn').addEventListener('click',()=>{const d=new Date();current=new Date(d.getFullYear(),d.getMonth(),1);loadCalendar();});
+  if(isAdmin){
+    document.getElementById('closeEdit').addEventListener('click',()=>document.getElementById('editCard').style.display='none');
+    document.getElementById('saveDate').addEventListener('click',saveSelected);
+    document.getElementById('resetDate').addEventListener('click',resetSelected);
+  }
+  loadCalendar();
+})();
+</script>
+{% endblock %}
+{% block head %}<style>
+.calendar-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted)}.legend span{display:flex;align-items:center;gap:6px}.dot{width:9px;height:9px;border-radius:50%;display:inline-block}.dot.working{background:var(--green)}.dot.off{background:#b8c0cc}.dot.override{background:var(--primary)}
+.calendar-head,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.calendar-head{margin-bottom:8px}.calendar-head span{text-align:center;font-size:11px;text-transform:uppercase;color:#9aa3b1;font-weight:800}.cal-day{min-height:105px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:7px;transition:.15s}.cal-day:not(:disabled):hover{border-color:#9baaf0;transform:translateY(-1px)}.cal-day:disabled{cursor:default}.cal-day.working{background:#f7fcf9}.cal-day.off{background:#fafafa}.cal-day.blank{border:0;background:transparent;cursor:default}.cal-day.today{box-shadow:inset 0 0 0 2px #7f92ef}.cal-day.has-override{border-color:#b8c4ff}.cal-num{font-size:17px;font-weight:800}.cal-day small{font-size:10px;color:var(--muted);white-space:normal}.override-label{font-size:9px;color:var(--primary);font-weight:800;text-transform:uppercase}@media(max-width:800px){.calendar-grid{gap:4px}.cal-day{min-height:82px;padding:6px}.cal-day .badge{font-size:9px}.cal-day small,.override-label{display:none}.calendar-toolbar{align-items:flex-start;flex-direction:column}}
+</style>{% endblock %}

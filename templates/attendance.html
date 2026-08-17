@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Mark Attendance{% endblock %}
+{% block crumb %}Mark Attendance{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Attendance Scanner</h1><p>One student at a time. The scanner verifies several webcam frames before creating an attendance record.</p></div><span id="dayBadge" class="badge badge-yellow">Checking calendar…</span></div>
+<div class="scanner">
+  <div class="card">
+    <video id="video" autoplay playsinline></video>
+    <div class="actions" style="margin-top:14px"><button id="scan" class="btn btn-success" style="flex:1" type="button">◉ Scan & Mark Attendance</button></div>
+    <div id="message"></div>
+    <div id="progress" class="progress" style="margin-top:12px;display:none"><div style="width:0"></div></div>
+  </div>
+  <div class="card"><div class="grid grid-3"><div><strong>1</strong><p class="muted small">Center exactly one face</p></div><div><strong>2</strong><p class="muted small">Hold still for 7 frames</p></div><div><strong>3</strong><p class="muted small">Only a conservative match is accepted</p></div></div></div>
+</div>
+<script>
+(function(){
+  let stream=null,scanning=false;
+  const video=document.getElementById('video'),btn=document.getElementById('scan'),msg=document.getElementById('message'),bar=document.querySelector('#progress div'),dayBadge=document.getElementById('dayBadge');
+  const show=(text,kind)=>{msg.className='message '+kind;msg.textContent=text};
+  const sleep=m=>new Promise(r=>setTimeout(r,m));
+  async function checkDay(){try{const r=await fetch('/api/school-day');const x=await r.json();if(x?.is_working){dayBadge.className='badge badge-green';dayBadge.textContent='Working day'}else{dayBadge.className='badge badge-gray';dayBadge.textContent='Non-working day';btn.disabled=true;show('Attendance is disabled today because the school calendar marks today as non-working.','info')}}catch(e){dayBadge.className='badge badge-red';dayBadge.textContent='Calendar unavailable';show('Calendar could not be checked. Attendance is disabled until the server is reachable.','err');btn.disabled=true}}
+  async function start(){try{stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});video.srcObject=stream;await checkDay()}catch(e){show('Camera access is required for attendance: '+e.message,'err');btn.disabled=true}}
+  async function capture(){const c=document.createElement('canvas');c.width=video.videoWidth;c.height=video.videoHeight;c.getContext('2d').drawImage(video,0,0);return c.toDataURL('image/jpeg',.94)}
+  async function scan(){if(scanning||!stream)return;scanning=true;btn.disabled=true;document.getElementById('progress').style.display='block';show('Collecting 7 verification frames…','info');const images=[];for(let i=0;i<7;i++){images.push(await capture());bar.style.width=((i+1)*100/7)+'%';await sleep(160)}try{const r=await fetch('/api/mark-attendance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images})});const d=await r.json();if(r.ok){let text=d.message;if(d.already_marked)text+=' No duplicate record was created.';else text+=` Verified across ${d.votes}/${d.frames_used} valid frames.`;if(d.teacher_notified)text+=' Class teacher notified.';show(text,'ok')}else show(d.error||'Recognition failed','err')}catch(e){show('Server error: '+e.message,'err')}finally{scanning=false;btn.disabled=false;setTimeout(()=>{bar.style.width='0';document.getElementById('progress').style.display='none'},700);await checkDay()}}
+  btn.addEventListener('click',scan);start();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,10 @@
+{
+  "name": "student-attendance",
+  "private": true,
+  "scripts": {
+    "dev": "python3 app.py",
+    "start": "python3 app.py",
+    "build": "pip3 install --break-system-packages -r requirements.txt 2>/dev/null || true",
+    "test": "echo \"no tests\" && exit 0"
+  }
+}

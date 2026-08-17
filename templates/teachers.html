@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Teachers{% endblock %}
+{% block crumb %}Teachers{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Teachers</h1><p>Create and manage class-teacher accounts. All teacher-management actions are protected by the administrator session/password.</p></div><span class="badge badge-green">Admin only</span></div>
+<div class="grid grid-2 teacher-page-grid">
+  <div class="card teacher-create-card">
+    <div class="section-title"><h2>Add teacher</h2><span class="small muted">Passwords are hashed</span></div>
+    <form id="teacherForm" novalidate>
+      <div class="form-grid">
+        <div class="form-group"><label for="teacherName">Name *</label><input id="teacherName" required autocomplete="name"></div>
+        <div class="form-group"><label for="teacherUsername">Username *</label><input id="teacherUsername" required autocomplete="username" spellcheck="false"></div>
+        <div class="form-group"><label for="teacherEmail">Email</label><input id="teacherEmail" type="email" autocomplete="email"></div>
+        <div class="form-group"><label for="teacherPhone">Phone</label><input id="teacherPhone" type="tel" autocomplete="tel" placeholder="+919876543210"></div>
+      </div>
+      <div class="form-group"><label for="teacherPassword">Initial password *</label><input id="teacherPassword" type="password" minlength="8" required autocomplete="new-password"><div class="small muted" style="margin-top:6px">Use at least 8 characters. Avoid sharing passwords over chat.</div></div>
+      <div class="form-group verify-option"><input id="teacherAutoVerify" type="checkbox" checked><label for="teacherAutoVerify">Skip email verification — teacher can sign in immediately</label></div>
+      <button class="btn btn-primary" type="submit" id="createBtn"><span class="btn-label">Create teacher</span></button>
+      <div id="msg"></div><div id="localLinkBox"></div>
+    </form>
+  </div>
+  <div class="card accounts-card">
+    <div class="section-title"><div><h2>Accounts</h2><div class="small muted" id="accountSummary">Loading…</div></div><button class="btn btn-light" type="button" id="refreshBtn">↻ <span>Refresh</span></button></div>
+    <div id="list"><div class="loading-shimmer"></div><div class="loading-shimmer" style="margin-top:8px;width:85%"></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const form = $('teacherForm'), list = $('list'), msg = $('msg'), localBox = $('localLinkBox'), refreshBtn = $('refreshBtn'), createBtn = $('createBtn');
+  const esc = x => String(x ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const escAttr = x => esc(x).replace(/`/g,'&#096;');
+  const setMessage = (text, ok=false) => { msg.className = 'message ' + (ok ? 'ok' : 'err'); msg.textContent = text || ''; };
+
+  function row(t) {
+    const verified = !!t.email_verified;
+    const active = !!t.active;
+    const name = escAttr(t.name);
+    return `<article class="teacher-row" data-id="${t.id}">
+      <div class="teacher-meta">
+        <div class="teacher-name-line"><strong>${esc(t.name)}</strong>${active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>'}</div>
+        <div class="small muted">@${esc(t.username)} · ${esc(t.email || 'No email')}</div>
+        ${t.phone ? `<div class="small muted">${esc(t.phone)}</div>` : ''}
+        <div class="teacher-badges">${verified ? '<span class="badge badge-green">Email verified</span>' : '<span class="badge badge-yellow">Email not verified</span>'}</div>
+      </div>
+      <div class="teacher-actions">
+        ${!verified ? `<button class="btn btn-success" data-action="verify" data-name="${name}">✓ Verify</button>` : ''}
+        ${!verified && t.email ? `<button class="btn btn-light" data-action="resend" data-name="${name}">✉ Resend</button>` : ''}
+        <button class="btn btn-warning" data-action="reset" data-name="${name}">Reset password</button>
+        <button class="btn btn-outline" data-action="set-password" data-name="${name}">Set password</button>
+        <button class="btn btn-light" data-action="toggle" data-active="${active}" data-name="${name}">${active ? 'Deactivate' : 'Activate'}</button>
+        <button class="btn btn-danger" data-action="delete" data-name="${name}">Delete</button>
+      </div>
+    </article>`;
+  }
+
+  async function load() {
+    setBusy(refreshBtn, true, 'Refreshing…');
+    list.setAttribute('aria-busy','true');
+    try {
+      const r = await fetch('/api/teachers', {headers:{'Accept':'application/json'}});
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Could not load teachers.');
+      $('accountSummary').textContent = `${data.length} account${data.length === 1 ? '' : 's'}`;
+      list.innerHTML = data.length ? data.map(row).join('') : '<div class="empty">No teacher accounts yet.</div>';
+    } catch (e) {
+      $('accountSummary').textContent = 'Unable to load';
+      list.innerHTML = `<div class="message err">${esc(e.message || 'Unable to connect to the server.')}</div>`;
+    } finally {
+      list.removeAttribute('aria-busy'); setBusy(refreshBtn, false);
+    }
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); localBox.innerHTML='';
+    const payload = {
+      name: $('teacherName').value.trim(), username: $('teacherUsername').value.trim(),
+      email: $('teacherEmail').value.trim(), phone: $('teacherPhone').value.trim(),
+      password: $('teacherPassword').value, auto_verify: $('teacherAutoVerify').checked
+    };
+    if (!payload.name || !payload.username || payload.password.length < 8) { setMessage('Name, username and an 8+ character password are required.'); return; }
+    setBusy(createBtn, true, 'Creating…');
+    try {
+      const r = await fetch('/api/teachers', {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body:JSON.stringify(payload)});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not create teacher.');
+      setMessage(d.message || 'Teacher account created.', true); showToast('Teacher account created','ok'); form.reset(); $('teacherAutoVerify').checked = true;
+      if (d.verification_link) localBox.innerHTML = `<div class="message info"><strong>Email delivery is unavailable.</strong><br>Use this local verification link:<div class="link-box"><a href="${escAttr(d.verification_link)}">${esc(d.verification_link)}</a></div></div>`;
+      await load();
+    } catch (e) { setMessage(e.message || 'Unable to connect to the server.'); }
+    finally { setBusy(createBtn, false); }
+  });
+
+  async function action(id, actionType, extra={}) {
+    const map = {
+      verify: ['/api/teachers/'+id+'/verify','POST'],
+      resend: ['/api/teachers/'+id+'/resend-verification','POST'],
+      reset: ['/api/teachers/'+id+'/reset-password','POST'],
+      'set-password': ['/api/teachers/'+id+'/set-password','POST'],
+      toggle: ['/api/teachers/'+id,'PUT'],
+      delete: ['/api/teachers/'+id,'DELETE']
+    };
+    const [url, method] = map[actionType];
+    const opts = {method, headers:{'Accept':'application/json'}};
+    if (extra.body) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(extra.body); }
+    const r = await fetch(url, opts);
+    let d={}; try{d=await r.json()}catch(_){}
+    return {r,d};
+  }
+
+  list.addEventListener('click', async e => {
+    const button = e.target.closest('button[data-action]'); if (!button || button.disabled) return;
+    const id = Number(button.closest('.teacher-row')?.dataset.id); const type = button.dataset.action; const name = button.dataset.name || 'this teacher';
+    if (!id) return;
+    if (type==='delete' && (!confirm(`Delete teacher ${name}? Students will remain but become unassigned.`) || !confirm('This permanently removes the teacher account. Continue?'))) return;
+    if (type==='verify' && !confirm(`Verify ${name} so they can sign in immediately?`)) return;
+    if (type==='toggle' && !confirm(`${button.dataset.active==='true'?'Deactivate ':'Activate '}${name}?`)) return;
+    if (type==='reset' && !confirm(`Send a secure password-reset email to ${name}?`)) return;
+    let extra={};
+    if (type==='set-password') {
+      const pwd=prompt(`Set a new password for ${name} (8+ characters):`);
+      if (pwd===null) return; if (pwd.length<8){showToast('Password must be at least 8 characters.','err');return;}
+      extra.body={password:pwd};
+    }
+    if (type==='toggle') extra.body={active:button.dataset.active!=='true'};
+    setBusy(button,true,'Working…');
+    try {
+      const {r,d}=await action(id,type,extra);
+      if (type==='resend' || type==='reset') {
+        if (d.email_sent) showToast(d.message || 'Email sent','ok');
+        else if (d.verification_link || d.reset_link) { showToast('Email unavailable — a local link was generated.','ok'); prompt('Local link:', d.verification_link || d.reset_link); }
+        else showToast(d.error || d.message || 'Email could not be sent','err');
+        return;
+      }
+      if (!r.ok) throw new Error(d.error || 'Operation failed');
+      showToast(d.message || 'Done','ok'); await load();
+    } catch (err) { showToast(err.message || 'Unable to complete operation','err'); }
+    finally { setBusy(button,false); }
+  });
+
+  refreshBtn.addEventListener('click', load);
+  load();
+})();
+</script>
+{% endblock %}
+{% block head %}
+<style>
+.teacher-page-grid{align-items:start}.teacher-row{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:17px 0;border-bottom:1px solid var(--line)}.teacher-row:last-child{border-bottom:0}.teacher-meta{min-width:0;flex:1}.teacher-name-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px}.teacher-badges{margin-top:8px}.teacher-badges .badge{margin-right:5px}.teacher-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:60%}.teacher-actions .btn{white-space:nowrap}.verify-option{display:flex;align-items:center;gap:9px}.verify-option label{margin:0;font-size:13px;font-weight:600}.link-box{word-break:break-all;margin-top:8px}.accounts-card{min-height:340px}button.btn{line-height:1.1}@media(max-width:1100px){.teacher-page-grid{grid-template-columns:1fr}.teacher-actions{max-width:none}}@media(max-width:800px){.teacher-row{flex-direction:column}.teacher-actions{width:100%;justify-content:flex-start}.teacher-actions .btn{flex:1 1 auto}.teacher-name-line{align-items:flex-start}.accounts-card{min-height:0}}
+</style>
+{% endblock %}

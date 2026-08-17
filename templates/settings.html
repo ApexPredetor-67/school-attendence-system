@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block crumb %}Settings{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Settings & Administration</h1><p>Recognition, notifications, school calendar defaults, backups and database maintenance.</p></div></div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <div class="section-title"><h2>Recognition & attendance</h2><span class="badge badge-green">Server saved</span></div>
+    <form id="systemForm">
+      <div class="form-grid">
+        <div class="form-group"><label for="threshold">Minimum attendance %</label><input type="number" id="threshold" min="0" max="100" step="0.1"></div>
+        <div class="form-group"><label for="workingDays">Weekly default</label><select id="workingDays"><option value="5">Monday–Friday</option><option value="6">Monday–Saturday</option></select></div>
+        <div class="form-group"><label for="tolerance">Face tolerance (lower = stricter)</label><input type="number" id="tolerance" min="0.35" max="0.65" step="0.01"></div>
+        <div class="form-group"><label for="minSamples">Minimum face samples</label><input type="number" id="minSamples" min="10" max="12"></div>
+        <div class="form-group"><label for="absenceTime">Absence alert time</label><input type="time" id="absenceTime"></div>
+        <div class="form-group"><label for="adminEmail">Admin report email</label><input type="email" id="adminEmail"></div>
+      </div>
+      <div class="message info">The school calendar overrides the weekly default. Only calendar-approved working days enter the attendance denominator.</div>
+      <button class="btn btn-primary" type="submit">Save system settings</button><div id="systemMsg"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>SMS notifications</h2><span class="badge badge-yellow">Optional provider</span></div>
+    <p class="muted small">SMS requires a live provider account and should only be enabled for recipients who have opted in. Provider credentials are read from the server environment so they survive Render deploys and are not stored in the database.</p>
+    <form id="smsForm">
+      <div class="form-grid">
+        <div class="form-group"><label>Twilio Account SID</label><input id="smsSid" readonly placeholder="Configured on Render"></div>
+        <div class="form-group"><label>Twilio phone number</label><input id="smsPhone" readonly placeholder="Configured on Render"></div>
+      </div>
+      <div class="message info">Set <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code> and <code>TWILIO_PHONE_NUMBER</code> in Render. Use E.164 numbers such as <code>+919876543210</code> for parent phones.</div>
+      <label><input type="checkbox" id="smsEnabled"> Enable SMS absence alerts</label>
+      <div class="actions" style="margin-top:12px"><button class="btn btn-success" type="submit">Save SMS setting</button><button class="btn btn-outline" type="button" id="testSmsBtn">Send test SMS</button></div><div id="smsMsg"></div>
+    </form>
+  </div>
+</div>
+
+<div class="grid grid-2" style="margin-top:18px">
+  <div class="card">
+    <div class="section-title"><h2>Email / Telegram</h2><span class="badge badge-green">Optional</span></div>
+    <form id="notifyForm">
+      <div class="form-grid">
+        <div class="form-group"><label for="smtpHost">SMTP host</label><input id="smtpHost" value="smtp.gmail.com"></div>
+        <div class="form-group"><label for="smtpPort">SMTP port</label><input id="smtpPort" type="number" value="587"></div>
+        <div class="form-group"><label for="email">Email address</label><input id="email" type="email" readonly placeholder="Configured in Render env"></div>
+        <div class="form-group"><label>Email app password</label><input id="password" type="password" placeholder="Configured in Render env" readonly></div>
+        <div class="form-group"><label for="sender">Sender name</label><input id="sender"></div>
+        <div class="form-group"><label>Telegram bot token</label><input id="token" type="password" placeholder="Configured in Render env" readonly></div>
+        <div class="form-group"><label for="testEmail">Test email recipient</label><input id="testEmail" type="email" placeholder="admin@example.com"></div>
+        <div class="form-group"><label for="testTelegramChat">Test Telegram chat ID</label><input id="testTelegramChat" placeholder="123456789"></div>
+      </div>
+      <div class="actions"><label><input type="checkbox" id="emailEnabled"> Email notifications</label><label><input type="checkbox" id="telegramEnabled"> Telegram notifications</label></div>
+      <div class="actions" style="margin-top:12px"><button class="btn btn-outline" type="submit">Save notification settings</button><button class="btn btn-light" type="button" id="testEmailBtn">Test email</button><button class="btn btn-light" type="button" id="testTelegramBtn">Test Telegram</button></div><div id="notifyMsg"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Database health</h2><span class="badge badge-green" id="dbBackend">Database</span></div>
+    <div class="grid grid-4">
+      <div><div class="stat-label">ACTIVE ATTENDANCE</div><div class="stat" id="activeCount">—</div></div>
+      <div><div class="stat-label">ARCHIVED</div><div class="stat" id="archivedCount">—</div></div>
+      <div><div class="stat-label">STUDENTS</div><div class="stat" id="studentCount">—</div></div>
+      <div><div class="stat-label">TRAINED</div><div class="stat" id="trainedCount">—</div></div>
+    </div>
+    <div class="actions" style="margin-top:14px">
+      <button class="btn btn-light" id="backupBtn" type="button">DB backup</button>
+      <button class="btn btn-primary" id="fullBackupBtn" type="button">Full backup</button>
+      <button class="btn btn-outline" id="compactBtn" type="button">Compact DB</button>
+    </div>
+    <p class="small muted" style="margin-top:12px">Full backup contains the database export plus stored face encodings/images, but never copies your .env secrets.</p>
+    <div id="dbMsg"></div>
+  </div>
+</div>
+
+<div class="card danger-zone" style="margin-top:18px">
+  <div class="section-title"><h2>Danger zone</h2><span class="badge badge-red">Permanent actions</span></div>
+  <div class="grid grid-3">
+    <div><h3>Archive old attendance</h3><p class="small muted">Move old active rows out of normal reports while keeping them recoverable.</p><button class="btn btn-warning" id="archiveOldBtn" type="button">Archive older than 90 days</button></div>
+    <div><h3>Delete archived</h3><p class="small muted">Permanent SQLite deletion of archived attendance older than 365 days.</p><button class="btn btn-danger" id="deleteOldBtn" type="button">Delete old archived</button></div>
+    <div><h3>Delete everything</h3><p class="small muted">Permanent deletion of all attendance rows. Students and face data remain.</p><button class="btn btn-danger" id="deleteAllBtn" type="button">Delete ALL attendance</button></div>
+  </div>
+  <div style="margin-top:16px"><button class="btn btn-danger" id="deleteArchivedAllBtn" type="button">Delete ALL archived attendance</button></div>
+  <div id="dangerMsg"></div>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const setMsg=(el,text,ok)=>{el.className='message '+(ok?'ok':'err');el.textContent=text};
+  async function jsonFetch(url,options={}){const r=await fetch(url,options);let d={};try{d=await r.json()}catch(_){d={error:'Unexpected server response'}}if(!r.ok)throw new Error(d.error||'Request failed');return d}
+
+  async function load(){
+    try{
+      const [settings,summary]=await Promise.all([jsonFetch('/api/get-settings'),jsonFetch('/api/admin/data-summary')]);
+      $('threshold').value=settings.attendanceThreshold||75;$('workingDays').value=settings.workingDays||6;$('tolerance').value=settings.faceTolerance||.48;$('minSamples').value=settings.minFaceSamples||8;$('absenceTime').value=settings.absenceAlertTime||'10:00';$('adminEmail').value=settings.adminEmail||'';
+      $('email').value=settings.emailAddress||'';$('smtpHost').value=settings.smtpHost||'smtp.gmail.com';$('smtpPort').value=settings.smtpPort||587;$('sender').value=settings.senderName||'Student Attendance';$('smsSid').value=settings.twilioSid||'';$('smsPhone').value=settings.twilioPhone||'';$('smsEnabled').checked=!!settings.smsEnabled;$('emailEnabled').checked=!!settings.emailNotifications;$('telegramEnabled').checked=!!settings.telegramEnabled;$('notifyMsg').textContent=(settings.smsConfigured?'SMS configured':'SMS credentials missing')+' · '+(settings.telegramConfigured?'Telegram configured':'Telegram token missing');
+      $('activeCount').textContent=summary.active_attendance;$('archivedCount').textContent=summary.archived_attendance;$('studentCount').textContent=summary.students;$('trainedCount').textContent=summary.trained_students||0;$('dbBackend').textContent=(summary.database_backend||'Database').toUpperCase();
+    }catch(err){setMsg($('dbMsg'),err.message,false)}
+  }
+
+  $('systemForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await jsonFetch('/api/save-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:{attendanceThreshold:+$('threshold').value,workingDays:+$('workingDays').value,faceTolerance:+$('tolerance').value,minFaceSamples:+$('minSamples').value,absenceAlertTime:$('absenceTime').value,adminEmail:$('adminEmail').value.trim()}})});setMsg($('systemMsg'),d.message,true)}catch(err){setMsg($('systemMsg'),err.message,false)}});
+  $('notifyForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await jsonFetch('/api/save-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:{senderName:$('sender').value.trim(),smtpHost:$('smtpHost').value.trim(),smtpPort:+$('smtpPort').value,notification:$('emailEnabled').checked},telegram:{notification:$('telegramEnabled').checked}})});setMsg($('notifyMsg'),d.message,true)}catch(err){setMsg($('notifyMsg'),err.message,false)}});
+  $('smsForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await jsonFetch('/api/save-settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sms:{notification:$('smsEnabled').checked}})});setMsg($('smsMsg'),d.message,true)}catch(err){setMsg($('smsMsg'),err.message,false)}});
+
+  $('testEmailBtn').addEventListener('click',async()=>{try{const d=await jsonFetch('/api/notifications/test-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient:$('testEmail').value.trim()})});setMsg($('notifyMsg'),d.message,true)}catch(err){setMsg($('notifyMsg'),err.message,false)}});
+  $('testTelegramBtn').addEventListener('click',async()=>{try{const d=await jsonFetch('/api/notifications/test-telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:$('testTelegramChat').value.trim()})});setMsg($('notifyMsg'),d.message,true)}catch(err){setMsg($('notifyMsg'),err.message,false)}});
+  $('testSmsBtn').addEventListener('click',async()=>{const phone=prompt('Enter the test phone number in E.164 format, e.g. +919876543210');if(!phone)return;try{const d=await jsonFetch('/api/notifications/test-sms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone})});setMsg($('smsMsg'),d.message,true)}catch(err){setMsg($('smsMsg'),err.message,false)}});
+
+  async function download(url){
+    const response=await fetch(url); if(!response.ok){let d={};try{d=await response.json()}catch(_){}throw new Error(d.error||'Backup failed');}
+    const blob=await response.blob(); const disposition=response.headers.get('Content-Disposition')||''; const match=disposition.match(/filename="?([^";]+)"?/i); const name=match?match[1]:'attendance-backup'; const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
+  $('backupBtn').addEventListener('click',async()=>{try{await download('/api/admin/backup');setMsg($('dbMsg'),'Database backup downloaded.',true)}catch(err){setMsg($('dbMsg'),err.message,false)}});
+  $('fullBackupBtn').addEventListener('click',async()=>{try{await download('/api/admin/backup-full');setMsg($('dbMsg'),'Full backup downloaded.',true)}catch(err){setMsg($('dbMsg'),err.message,false)}});
+  $('compactBtn').addEventListener('click',async()=>{try{const d=await jsonFetch('/api/admin/compact-db',{method:'POST'});setMsg($('dbMsg'),d.message,true)}catch(err){setMsg($('dbMsg'),err.message,false)}});
+  async function postDanger(url,body){try{const d=await jsonFetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});setMsg($('dangerMsg'),d.message,true);load()}catch(err){setMsg($('dangerMsg'),err.message,false)}}
+  $('archiveOldBtn').addEventListener('click',()=>{if(confirm('Archive active attendance older than 90 days?'))postDanger('/api/admin/archive-old',{days:90})});
+  $('deleteOldBtn').addEventListener('click',()=>{if(confirm('Permanently delete archived attendance older than 365 days? This cannot be undone.'))postDanger('/api/admin/delete-archived',{days:365})});
+  $('deleteAllBtn').addEventListener('click',()=>{if(prompt('Type DELETE ATTENDANCE exactly to permanently delete every attendance record.')==='DELETE ATTENDANCE')postDanger('/api/admin/delete-attendance-all',{confirmation:'DELETE ATTENDANCE'})});
+  $('deleteArchivedAllBtn').addEventListener('click',()=>{if(prompt('Type DELETE ARCHIVED exactly to permanently delete every archived attendance record.')==='DELETE ARCHIVED')postDanger('/api/admin/delete-archived-all',{confirmation:'DELETE ARCHIVED'})});
+  load();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Teacher Password Reset{% endblock %}
+{% block crumb %}Password Reset{% endblock %}
+{% block content %}
+<div style="max-width:620px;margin:55px auto">
+  <div class="card">
+    <div class="brand" style="padding:0 0 18px">
+      <div class="brand-icon">↻</div>
+      <div>Student Attendance</div>
+    </div>
+
+    {% if sent %}
+      <h1>Check your email</h1>
+      <p class="muted" style="margin-top:7px">If the account exists, a password-reset email has been sent. Check inbox and spam folders.</p>
+      <div class="message ok">The reset link expires soon and can be used only once.</div>
+    {% else %}
+      <h1>Reset teacher password</h1>
+      <p class="muted" style="margin-top:7px">Enter your teacher username or school email address.</p>
+
+      {% if error %}<div class="message err">{{ error }}</div>{% endif %}
+      {% if info %}<div class="message warn">{{ info }}</div>{% endif %}
+
+      {% if verification_required %}
+        <div class="message warn">Your email must be verified before a password reset can be issued.</div>
+      {% endif %}
+
+      <form method="post" style="margin-top:18px">
+        <div class="form-group">
+          <label for="identifier">Username or email</label>
+          <input id="identifier" name="identifier" required autofocus autocomplete="username">
+        </div>
+        <button class="btn btn-primary" type="submit">Send reset email</button>
+      </form>
+
+      {% if local_link %}
+        <div class="message info" style="margin-top:16px">
+          <strong>Local development link</strong><br>
+          Email delivery is not configured on this server, so use this link:
+          <div style="word-break:break-all;margin-top:8px"><a href="{{ local_link }}">{{ local_link }}</a></div>
+          {% if email_error %}<div class="small muted" style="margin-top:6px">Mailer: {{ email_error }}</div>{% endif %}
+        </div>
+      {% endif %}
+    {% endif %}
+
+    <div class="actions" style="margin-top:18px">
+      <a class="btn btn-light" href="/teacher/login">Back to teacher login</a>
+      <a class="btn btn-outline" href="/login">Admin login</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

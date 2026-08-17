@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Teacher Email Verification{% endblock %}
+{% block crumb %}Email Verification{% endblock %}
+{% block content %}
+<div style="max-width:620px;margin:55px auto">
+  <div class="card">
+    <div class="brand" style="padding:0 0 18px">
+      <div class="brand-icon">✉</div>
+      <div>Student Attendance</div>
+    </div>
+
+    {% if success %}
+      <h1>{% if already_verified %}Email already verified{% else %}Email verified{% endif %}</h1>
+      <p class="muted" style="margin-top:7px">
+        {% if teacher %}
+          {{ teacher.name }}, your teacher account is now verified.
+        {% else %}
+          Your teacher account can now be used.
+        {% endif %}
+      </p>
+      {% if info %}<div class="message ok">{{ info }}</div>{% endif %}
+      {% if local_link %}
+        <div class="message info">
+          <strong>Local verification link</strong><br>
+          <span class="small">Email delivery is not configured on this local server.</span>
+          <div style="word-break:break-all;margin-top:8px"><a href="{{ local_link }}">{{ local_link }}</a></div>
+          {% if email_error %}<div class="small muted" style="margin-top:6px">Mailer: {{ email_error }}</div>{% endif %}
+        </div>
+      {% endif %}
+      <div class="actions" style="margin-top:18px">
+        <a class="btn btn-primary" href="/teacher/login">Go to teacher login</a>
+        {% if resend %}<a class="btn btn-light" href="/teacher/resend-verification">Resend verification</a>{% endif %}
+      </div>
+    {% else %}
+      <h1>Verification problem</h1>
+      <p class="muted">{{ error or 'We could not verify this account.' }}</p>
+
+      {% if resend %}
+        <div class="message info" style="margin-top:18px">
+          The old link may have expired or been replaced by a newer email. You can request a fresh link here.
+        </div>
+        <form method="post" action="/teacher/resend-verification" style="margin-top:20px">
+          <div class="form-group">
+            <label for="identifier">Teacher username or email</label>
+            <input id="identifier" name="identifier" required autofocus>
+          </div>
+          <button class="btn btn-primary" type="submit">Send a fresh verification link</button>
+        </form>
+      {% endif %}
+
+      <div class="actions" style="margin-top:18px">
+        <a class="btn btn-light" href="/teacher/login">Back to teacher login</a>
+        <a class="btn btn-outline" href="/teacher/forgot-password">Forgot password?</a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
