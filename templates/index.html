@@ -70,4 +70,76 @@
     </div>
   </div>
 {% endif %}
+{% endblock %}{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block crumb %}Home{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    {% if session.get('teacher_id') %}
+      <h1>Teacher Dashboard</h1>
+      <p>Manage your students and view their attendance.</p>
+    {% elif session.get('admin_id') %}
+      <h1>Student Attendance System</h1>
+      <p>Manage students, teachers and attendance.</p>
+    {% else %}
+      <h1>Student Attendance System</h1>
+      <p>Fast, local and face-recognition based attendance management.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid grid-2">
+  <div class="card stat-card">
+    <div class="stat-label">{% if session.get('teacher_id') %}MY STUDENTS{% else %}REGISTERED STUDENTS{% endif %}</div>
+    <div class="stat">{{ total_users }}</div>
+    <div class="stat-icon">{{ icon('users') }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="stat-label">{% if session.get('teacher_id') %}PRESENT TODAY{% else %}TODAY PRESENT{% endif %}</div>
+    <div class="stat">{{ today_attendance }}</div>
+    <div class="stat-icon">{{ icon('clipboard') }}</div>
+  </div>
+</div>
+
+{% if session.get('teacher_id') %}
+  <div class="card" style="margin-top:18px">
+    <div class="section-title">
+      <h2>Teacher workspace</h2>
+      <span class="badge badge-green">Teacher</span>
+    </div>
+    <p class="muted">You can manage only the students assigned to your teacher account.</p>
+    <div class="actions" style="margin-top:16px">
+      <a class="btn btn-primary" href="/dashboard">{{ icon('home') }} My Dashboard</a>
+      <a class="btn btn-success" href="/register">{{ icon('userplus') }} Register Student</a>
+      <a class="btn btn-light" href="/students">{{ icon('users') }} My Students</a>
+      <a class="btn btn-light" href="/teacher/attendance">{{ icon('clipboard') }} Attendance Records</a>
+      <a class="btn btn-light" href="/teacher/notifications">{{ icon('bell') }} Notifications</a>
+    </div>
+  </div>
+{% elif session.get('admin_id') %}
+  <div class="card" style="margin-top:18px">
+    <div class="section-title">
+      <h2>Administrator workspace</h2>
+      <span class="badge badge-yellow">Admin</span>
+    </div>
+    <p class="muted">Manage teachers, students, attendance and system settings.</p>
+    <div class="actions" style="margin-top:16px">
+      <a class="btn btn-primary" href="/admin">{{ icon('home') }} Admin Dashboard</a>
+      <a class="btn btn-light" href="/teachers">{{ icon('teacher') }} Manage Teachers</a>
+      <a class="btn btn-light" href="/students">{{ icon('users') }} Students</a>
+      <a class="btn btn-success" href="/attendance">{{ icon('scan') }} Attendance Scanner</a>
+    </div>
+  </div>
+{% else %}
+  <div class="card" style="margin-top:18px">
+    <h2>Get started</h2>
+    <p class="muted">Choose your account type to continue.</p>
+    <div class="actions" style="margin-top:14px">
+      <a class="btn btn-primary" href="/login">{{ icon('settings') }} Admin Login</a>
+      <a class="btn btn-success" href="/teacher/login">{{ icon('teacher') }} Teacher Login</a>
+      <a class="btn btn-light" href="/attendance">{{ icon('scan') }} Attendance Scanner</a>
+    </div>
+  </div>
+{% endif %}
 {% endblock %}
